@@ -1,6 +1,13 @@
 import pytest
+from datetime import datetime
+from unittest.mock import AsyncMock
 from starlette.testclient import TestClient
 from app.main import app
+from app.api.deps import get_current_user
+from app.core.database import get_db
+from app.models.domain import OrderStatus
+from app.models.purchase_order import PurchaseOrder
+from app.models.tenant import User, UserRole
 from app.services.agent_workflow import create_scm_agent_workflow
 
 client = TestClient(app)
@@ -25,6 +32,40 @@ def test_tracking_event():
     response = client.post("/api/v1/tracking/events", json=payload)
     assert response.status_code == 202
     assert response.json() == {"status": "queued"}
+
+def test_purchase_order_decision_updates_draft():
+    order = PurchaseOrder(
+        id=50,
+        tenant_id=1,
+        product_id=101,
+        suggested_qty=20,
+        status=OrderStatus.DRAFT,
+        created_at=datetime(2026, 10, 18),
+    )
+    result = type("Result", (), {"scalar_one_or_none": lambda self: order})()
+    session = AsyncMock()
+    session.execute.return_value = result
+
+    async def override_db():
+        yield session
+
+    async def override_user():
+        return User(id=1, email="admin@companyA.com", hashed_password="test", role=UserRole.ADMIN, tenant_id=1)
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = override_user
+    try:
+        response = client.patch(
+            "/api/v1/orders/50/decision",
+            json={"action": "MODIFIED", "final_qty": 25},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert order.status == OrderStatus.APPROVED
+    assert order.final_qty == 25
+    session.commit.assert_awaited_once()
 
 @pytest.mark.asyncio
 async def test_scm_agent_workflow():

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.core.database import get_db
@@ -8,6 +8,9 @@ from app.api.deps import get_current_user, require_roles
 from app.models.tenant import User, UserRole
 from app.models.product import Product
 from app.core.exceptions import ProductNotFoundError
+from app.models.domain import OrderStatus
+from app.models.purchase_order import PurchaseOrder
+from app.schemas.purchase_order import PurchaseOrderDecision, PurchaseOrderResponse
 
 router = APIRouter()
 scm_workflow = create_scm_agent_workflow()
@@ -60,4 +63,30 @@ async def run_inventory_prediction(
         "reasoning_summary": draft_order.reasoning_summary,
         "execution_logs": workflow_result.get("messages", [])
     }
+
+
+@router.patch("/{purchase_order_id}/decision", response_model=PurchaseOrderResponse)
+async def decide_purchase_order(
+    purchase_order_id: int,
+    decision: PurchaseOrderDecision,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+):
+    result = await db.execute(
+        select(PurchaseOrder).where(
+            PurchaseOrder.id == purchase_order_id,
+            PurchaseOrder.tenant_id == current_user.tenant_id,
+        )
+    )
+    order = result.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase order not found")
+    if order.status != OrderStatus.DRAFT:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Purchase order is already decided")
+
+    order.final_qty = 0 if decision.action == "REJECTED" else decision.final_qty
+    order.status = OrderStatus.REJECTED if decision.action == "REJECTED" else OrderStatus.APPROVED
+    await db.commit()
+    await db.refresh(order)
+    return order
 

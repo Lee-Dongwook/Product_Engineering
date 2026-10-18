@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetcher } from "@/lib/api";
-import { trackOrderDecision } from "@/utils/track";
 
 interface Product {
   id: number;
@@ -28,6 +27,7 @@ export default function OrderApprovalPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [decisionMessage, setDecisionMessage] = useState("");
 
   useEffect(() => {
     fetcher<Product[]>("/inventory/products")
@@ -52,6 +52,7 @@ export default function OrderApprovalPage() {
       });
       setProposal(result);
       setFinalQty(result.suggested_qty);
+      setDecisionMessage("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "발주 예측에 실패했습니다.");
     } finally {
@@ -69,18 +70,14 @@ export default function OrderApprovalPage() {
     setSubmitting(true);
     setError("");
     try {
-      await trackOrderDecision({
-        event_name: "order_decision_submitted",
-        user_id: "user_001",
-        product_id: proposal.product_id,
-        purchase_order_id: proposal.purchase_order_id,
-        suggested_qty: proposal.suggested_qty,
+      await fetcher(`/orders/${proposal.purchase_order_id}/decision`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          action,
         final_qty: action === "REJECTED" ? 0 : finalQty,
-        action,
-        decision_time_ms: 0,
-        timestamp: new Date().toISOString(),
+        }),
       });
-      alert(`발주 제안이 ${action} 처리되었습니다.`);
+      setDecisionMessage(`발주 제안이 ${action} 처리되었습니다.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "결정 저장에 실패했습니다.");
     } finally {
@@ -113,6 +110,7 @@ export default function OrderApprovalPage() {
           </Button>
           {loading && <p className="text-sm text-gray-500">상품을 불러오는 중입니다.</p>}
           {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
+          {decisionMessage && <p className="text-sm text-green-700" role="status">{decisionMessage}</p>}
         </CardContent>
       </Card>
 

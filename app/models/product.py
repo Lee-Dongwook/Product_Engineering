@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.models.domain import Base
+from app.models.supplier import Supplier
 
 class Product(Base):
     __tablename__ = "products"
@@ -16,7 +17,7 @@ class Product(Base):
     unit_cost = Column(Float, nullable=False)
 
     supplier_id = Column(Integer, ForeignKey("suppliers.id"))
-    supplier = relationship("Supplier", back_populates="products")
+    supplier = relationship(Supplier, back_populates="products")
     inventory_logs = relationship("InventoryLog", back_populates="product")
     tenant = relationship("Tenant", back_populates="products")
 
