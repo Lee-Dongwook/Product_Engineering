@@ -21,6 +21,65 @@ from app.schemas.purchase_order import (
 router = APIRouter()
 scm_workflow = create_scm_agent_workflow()
 
+def build_workflow_steps(
+    workflow_result: dict,
+    initial_state: dict,
+) -> list[dict]:
+    messages = workflow_result.get("messages", [])
+    message_by_agent = {
+        "demand_agent": "예상 수요량을 산출했습니다.",
+        "supplier_agent": "공급 조건을 검토했습니다.",
+        "supervisor": "최종 발주 수량을 산출했습니다.",
+    }
+
+    for message in messages:
+        if message.startswith("Demand Agent:"):
+            message_by_agent["demand_agent"] = message.split(":", 1)[1].strip()
+        elif message.startswith("Supplier Agent:"):
+            message_by_agent["supplier_agent"] = message.split(":", 1)[1].strip()
+        elif message.startswith("Supervisor Agent:"):
+            message_by_agent["supervisor"] = message.split(":", 1)[1].strip()
+
+    predicted_demand = workflow_result.get("predicted_demand", 0)
+    timing = workflow_result.get("required_order_timing", "")
+    suggested_qty = workflow_result.get("suggested_qty", 0)
+
+    current_stock = initial_state.get("current_stock", 0)
+    safety_stock = initial_state.get("safety_stock", 0)
+    lead_time = initial_state.get("lead_time_days", 7)
+    moq = initial_state.get("moq", 1)
+
+    return [
+        {
+            "id": "demand_agent",
+            "status": "completed",
+            "message": message_by_agent["demand_agent"],
+            "input_summary": (
+                f"판매 이력 {len(initial_state.get('sales_history', []))}개 항목"
+            ),
+            "output_summary": f"예상 월간 수요량 {predicted_demand}개",
+        },
+        {
+            "id": "supplier_agent",
+            "status": "completed",
+            "message": message_by_agent["supplier_agent"],
+            "input_summary": f"공급 리드타임 {lead_time}일",
+            "output_summary": timing,
+        },
+        {
+            "id": "supervisor",
+            "status": "completed",
+            "message": message_by_agent["supervisor"],
+            "input_summary": (
+                f"현재 재고 {current_stock}개 · "
+                f"안전재고 {safety_stock}개 · "
+                f"예상 수요 {predicted_demand}개 · "
+                f"MOQ {moq}개"
+            ),
+            "output_summary": f"최종 발주 제안 수량 {suggested_qty}개",
+        },
+    ]
+
 @router.post("/run-prediction/{product_id}")
 async def run_inventory_prediction(
     product_id: int, 
@@ -67,7 +126,11 @@ async def run_inventory_prediction(
         "product_id": product_id,
         "suggested_qty": draft_order.suggested_qty,
         "reasoning_summary": draft_order.reasoning_summary,
-        "execution_logs": workflow_result.get("messages", [])
+        "execution_logs": workflow_result.get("messages", []),
+        "workflow_steps": build_workflow_steps(
+            workflow_result,
+            initial_state,
+        )
     }
 
 

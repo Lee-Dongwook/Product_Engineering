@@ -20,18 +20,23 @@
 - 발주 제안 승인·수정·거절 이벤트 수집 API
 - Next.js 기반 발주 제안 검토 화면
 - 헬스 체크 및 기본 API/워크플로 테스트
+- 발주 AI 워크플로우 시각화
+  - 수요 예측 → 공급 조건 검토 → 최종 발주 제안 → 운영자 결정
+  - 단계별 실행 상태 및 메시지 표시
+  - 선택한 단계의 입력·출력 요약 확인
+  - AI 제안에 대한 운영자 승인·수정·거절 연동
 
 ## 기술 스택
 
-| 영역 | 사용 기술 |
-| --- | --- |
-| Backend | Python 3.11, FastAPI, Pydantic |
-| Database | PostgreSQL 15, SQLAlchemy Async, Alembic |
-| 비동기 처리 | Redis, Celery |
-| Agent workflow | LangGraph, LangChain Core |
-| Frontend | Next.js, React, TypeScript, Tailwind CSS |
-| Test | pytest, pytest-asyncio, httpx |
-| Container | Docker Compose |
+| 영역           | 사용 기술                                |
+| -------------- | ---------------------------------------- |
+| Backend        | Python 3.11, FastAPI, Pydantic           |
+| Database       | PostgreSQL 15, SQLAlchemy Async, Alembic |
+| 비동기 처리    | Redis, Celery                            |
+| Agent workflow | LangGraph, LangChain Core                |
+| Frontend       | Next.js, React, TypeScript, Tailwind CSS |
+| Test           | pytest, pytest-asyncio, httpx            |
+| Container      | Docker Compose                           |
 
 ## 프로젝트 구조
 
@@ -71,7 +76,7 @@ curl http://localhost:8000/health
 기대 결과:
 
 ```json
-{"status":"ok","service":"scm-backend"}
+{ "status": "ok", "service": "scm-backend" }
 ```
 
 ### 2. 프론트엔드 실행
@@ -131,16 +136,17 @@ python -m app.scripts.seed
 
 모든 API는 `/api/v1` 접두사를 사용합니다.
 
-| Method | Endpoint | 설명 |
-| --- | --- | --- |
-| `GET` | `/health` | 서버 상태 확인 |
-| `GET` | `/api/v1/inventory/products` | 현재 테넌트의 상품 목록 조회 |
-| `GET` | `/api/v1/inventory/products/{product_id}` | 상품 상세 조회 |
-| `POST` | `/api/v1/inventory/products` | 상품 등록 (ADMIN, MANAGER) |
-| `POST` | `/api/v1/orders/run-prediction/{product_id}` | 발주 수량 계산 및 발주 초안 저장 |
-| `GET` | `/api/v1/stream/agent-stream/{product_id}` | 에이전트 진행 상태 SSE 스트림 |
-| `PATCH` | `/api/v1/orders/{purchase_order_id}/decision` | 발주 승인·수정·거절 및 결정 이력 저장 |
-| `GET` | `/api/v1/orders/decision-metrics` | 테넌트별 승인·수정·거절 건수 조회 |
+| Method  | Endpoint                                      | 설명                                                          |
+| ------- | --------------------------------------------- | ------------------------------------------------------------- |
+| `GET`   | `/health`                                     | 서버 상태 확인                                                |
+| `GET`   | `/api/v1/inventory/products`                  | 현재 테넌트의 상품 목록 조회                                  |
+| `GET`   | `/api/v1/inventory/products/{product_id}`     | 상품 상세 조회                                                |
+| `POST`  | `/api/v1/inventory/products`                  | 상품 등록 (ADMIN, MANAGER)                                    |
+| `POST`  | `/api/v1/orders/run-prediction/{product_id}`  | 발주 수량 계산 및 발주 초안 저장                              |
+| `GET`   | `/api/v1/stream/agent-stream/{product_id}`    | 에이전트 진행 상태 SSE 스트림                                 |
+| `PATCH` | `/api/v1/orders/{purchase_order_id}/decision` | 발주 승인·수정·거절 및 결정 이력 저장                         |
+| `GET`   | `/api/v1/orders/decision-metrics`             | 테넌트별 승인·수정·거절 건수 조회                             |
+| `POST`  | `/api/v1/orders/run-prediction/{product_id}`  | 발주 수량 계산, 발주 초안 저장 및 단계별 워크플로우 결과 반환 |
 
 ### 상품 등록 예시
 
