@@ -1,0 +1,25 @@
+1:"$Sreact.fragment"
+2:"/_next/static/chunks/3727-02i72m06.js"
+3:"/_next/static/chunks/1zx-vne69pdsh.js"
+4:I[42194,["$2","$3"],"default"]
+5:I[5817,["$2","$3"],"default"]
+9:"/_next/static/chunks/2d64q6y510tt-.js"
+a:I[8505,["$2","$3","$9"],""]
+b:I[13693,["$2","$3"],"OutletBoundary"]
+c:"$Sreact.suspense"
+f:"ViewportBoundary"
+10:I[13693,["$2","$3"],"$f"]
+11:"MetadataBoundary"
+12:I[13693,["$2","$3"],"$11"]
+:HL["/_next/static/chunks/2m5jly8no-iq8.css","style"]
+7:X
+8:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$1","c",{"children":[["$","main",null,{"className":"container mx-auto py-16 px-4 text-center","children":[["$","h1",null,{"className":"text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl","children":"AI SCM 재고 최적화 플랫폼"}],["$","p",null,{"className":"mt-4 text-lg text-slate-600 max-w-2xl mx-auto","children":"LangGraph 멀티 에이전트 기반 수요 예측 및 적정 발주량 자동 제안 시스템"}],["$","div",null,{"className":"mt-8","children":["$","$La",null,{"href":"/orders","className":"inline-flex items-center px-6 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors shadow-sm","children":"발주 제안 검토 대시보드 바로가기"}]}]]}],[["$","script","script-0",{"src":"/_next/static/chunks/2d64q6y510tt-.js","async":true}]],["$","$Lb",null,{"children":["$","$c",null,{"name":"Next.MetadataOutlet","children":"$@d"}]}]]}],"p":"$@e","v":null,"s":"$7"}}]]
+0:{"t":{"t":{"s":"","h":80,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/2m5jly8no-iq8.css","precedence":"next"}],["$","script","script-0",{"src":"/_next/static/chunks/3727-02i72m06.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/1zx-vne69pdsh.js","async":true}]],["$","html",null,{"lang":"ko","children":["$","body",null,{"className":"min-h-screen bg-slate-50 text-slate-900 antialiased","children":["$","$L4",null,{"parallelRouterKey":"children","template":["$","$L5",null,{}],"notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]]}]}]}]]}],"p":"$@6","v":null,"s":"$7"},"c":"$Q8"},"h":{"r":["$","$1","h",{"children":[null,["$","$L10",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L12",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$c",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"SCM Inventory Optimization Platform"}],["$","meta","1",{"name":"description","content":"AI-driven inventory forecasting and multi-agent purchase order management"}]]}]}],null]}],null]}],"p":"$@13","v":null,"s":"$7"}},"a":"$@14","u":"$@15","b":"sbLc0LLI9kB1ITmsjp0mb"}
+d:null
+7:300
+15:true
+7:C
+14:0
+6:"$undefined"
+13:"$undefined"
+e:"$undefined"

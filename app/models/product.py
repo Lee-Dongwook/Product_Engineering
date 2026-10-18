@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, relationship
-
+from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy.orm import relationship
 
 from app.models.domain import Base
 
@@ -7,6 +7,7 @@ class Product(Base):
     __tablename__ = "products"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
     sku = Column(String(50), unique=True, index=True, nullable=False)
     name = Column(String(100), nullable=False)
     category = Column(String(50), index=True)
@@ -17,3 +18,5 @@ class Product(Base):
     supplier_id = Column(Integer, ForeignKey("suppliers.id"))
     supplier = relationship("Supplier", back_populates="products")
     inventory_logs = relationship("InventoryLog", back_populates="product")
+    tenant = relationship("Tenant", back_populates="products")
+

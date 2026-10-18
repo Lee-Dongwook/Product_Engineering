@@ -9,6 +9,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 from app.models.domain import Base
+from app.models.tenant import Tenant, User
+from app.models.supplier import Supplier
+from app.models.product import Product
+from app.models.inventory import InventoryLog
+from app.models.purchase_order import PurchaseOrder
 from app.core.config import settings
 
 # this is the Alembic Config object, which provides

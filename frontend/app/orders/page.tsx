@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { trackOrderDecision } from "@/schemas/tracking";
+import { trackOrderDecision } from "@/utils/track";
 
 interface OrderProposal {
   product_id: number;

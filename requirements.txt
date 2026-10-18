@@ -1,8 +1,10 @@
 # Web Framework & Async
 fastapi==0.110.0
+starlette>=0.36.3,<0.37.0
 uvicorn[standard]==0.28.0
-pydantic==2.6.4
+pydantic==2.14.1
 pydantic-settings==2.2.1
+sse-starlette>=1.8.0,<3.0.0
 
 # Database & Migration
 SQLAlchemy==2.0.28
@@ -12,6 +14,11 @@ psycopg2-binary==2.9.9
 
 # Caching & Async Queue
 redis==5.0.3
+celery==5.6.3
+
+# AI & Multi-Agent Engine
+langgraph==1.2.16
+langchain-core==1.6.12
 
 # Testing & Dev
 pytest==8.1.1

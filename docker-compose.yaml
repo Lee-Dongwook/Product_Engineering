@@ -14,6 +14,19 @@ services:
     depends_on:
       - db
       - redis
+
+  worker:
+    build: .
+    command: celery -A app.core.celery_app.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://scm_user:scm_pass@db:5432/scm_db
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
   db:
     image: postgres:15-alpine
     environment:
@@ -29,5 +42,6 @@ services:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+
 volumes:
   postgres_data:
