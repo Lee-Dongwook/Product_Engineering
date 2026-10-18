@@ -1,11 +1,12 @@
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from starlette.testclient import TestClient
 from app.main import app
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.domain import OrderStatus
+from app.models.order_decision_event import OrderDecisionEvent
 from app.models.purchase_order import PurchaseOrder
 from app.models.tenant import User, UserRole
 from app.services.agent_workflow import create_scm_agent_workflow
@@ -43,7 +44,10 @@ def test_purchase_order_decision_updates_draft():
         created_at=datetime(2026, 10, 18),
     )
     result = type("Result", (), {"scalar_one_or_none": lambda self: order})()
-    session = AsyncMock()
+    session = MagicMock()
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
+    session.execute = AsyncMock()
     session.execute.return_value = result
 
     async def override_db():
@@ -65,7 +69,38 @@ def test_purchase_order_decision_updates_draft():
     assert response.status_code == 200
     assert order.status == OrderStatus.APPROVED
     assert order.final_qty == 25
+    event = session.add.call_args.args[0]
+    assert isinstance(event, OrderDecisionEvent)
+    assert event.action == "MODIFIED"
+    assert event.final_qty == 25
     session.commit.assert_awaited_once()
+
+def test_decision_metrics_returns_action_counts():
+    result = type("Result", (), {"all": lambda self: [("APPROVED", 3), ("MODIFIED", 2), ("REJECTED", 1)]})()
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.execute.return_value = result
+
+    async def override_db():
+        yield session
+
+    async def override_user():
+        return User(id=1, email="admin@companyA.com", hashed_password="test", role=UserRole.ADMIN, tenant_id=1)
+
+    app.dependency_overrides[get_db] = override_db
+    app.dependency_overrides[get_current_user] = override_user
+    try:
+        response = client.get("/api/v1/orders/decision-metrics")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total_decisions": 6,
+        "approved_count": 3,
+        "modified_count": 2,
+        "rejected_count": 1,
+    }
 
 @pytest.mark.asyncio
 async def test_scm_agent_workflow():

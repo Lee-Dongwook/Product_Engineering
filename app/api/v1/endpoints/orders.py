@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.core.database import get_db
@@ -10,7 +11,12 @@ from app.models.product import Product
 from app.core.exceptions import ProductNotFoundError
 from app.models.domain import OrderStatus
 from app.models.purchase_order import PurchaseOrder
-from app.schemas.purchase_order import PurchaseOrderDecision, PurchaseOrderResponse
+from app.models.order_decision_event import OrderDecisionEvent
+from app.schemas.purchase_order import (
+    DecisionMetricsResponse,
+    PurchaseOrderDecision,
+    PurchaseOrderResponse,
+)
 
 router = APIRouter()
 scm_workflow = create_scm_agent_workflow()
@@ -65,6 +71,28 @@ async def run_inventory_prediction(
     }
 
 
+@router.get("/decision-metrics", response_model=DecisionMetricsResponse)
+async def get_decision_metrics(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(OrderDecisionEvent.action, func.count(OrderDecisionEvent.id))
+        .where(OrderDecisionEvent.tenant_id == current_user.tenant_id)
+        .group_by(OrderDecisionEvent.action)
+    )
+    counts = dict(result.all())
+    approved_count = counts.get("APPROVED", 0)
+    modified_count = counts.get("MODIFIED", 0)
+    rejected_count = counts.get("REJECTED", 0)
+    return {
+        "total_decisions": approved_count + modified_count + rejected_count,
+        "approved_count": approved_count,
+        "modified_count": modified_count,
+        "rejected_count": rejected_count,
+    }
+
+
 @router.patch("/{purchase_order_id}/decision", response_model=PurchaseOrderResponse)
 async def decide_purchase_order(
     purchase_order_id: int,
@@ -86,6 +114,16 @@ async def decide_purchase_order(
 
     order.final_qty = 0 if decision.action == "REJECTED" else decision.final_qty
     order.status = OrderStatus.REJECTED if decision.action == "REJECTED" else OrderStatus.APPROVED
+    db.add(
+        OrderDecisionEvent(
+            tenant_id=order.tenant_id,
+            purchase_order_id=order.id,
+            product_id=order.product_id,
+            action=decision.action,
+            suggested_qty=order.suggested_qty,
+            final_qty=order.final_qty,
+        )
+    )
     await db.commit()
     await db.refresh(order)
     return order

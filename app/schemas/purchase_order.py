@@ -22,6 +22,12 @@ class PurchaseOrderDecision(BaseModel):
     action: Literal["APPROVED", "MODIFIED", "REJECTED"]
     final_qty: int = Field(ge=0)
 
+class DecisionMetricsResponse(BaseModel):
+    total_decisions: int
+    approved_count: int
+    modified_count: int
+    rejected_count: int
+
 class PurchaseOrderResponse(PurchaseOrderBase):
     id: int
     tenant_id: int
