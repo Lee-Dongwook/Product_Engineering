@@ -1,4 +1,4 @@
-const API_BASE_URL =
+export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export async function fetcher<T>(
@@ -14,7 +14,7 @@ export async function fetcher<T>(
   });
 
   if (!response.ok) {
-    throw new Error(`API Error: ${response.statusText}`);
+    throw new Error(`요청에 실패했습니다. (${response.status})`);
   }
 
   return response.json();
