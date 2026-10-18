@@ -118,12 +118,14 @@ celery -A app.core.celery_app.celery_app worker --loglevel=info
 
 ## 데이터베이스 마이그레이션
 
-Alembic 설정은 포함되어 있지만 현재 저장소에는 생성된 migration revision이 없습니다. 처음 DB 스키마를 만들 때는 모델 검토 후 revision을 생성하고 적용하세요.
+초기 스키마 migration과 화면 확인용 개발 시드 데이터가 포함되어 있습니다. DB를 실행한 뒤 아래 순서로 적용하세요.
 
 ```bash
-alembic revision --autogenerate -m "create initial scm tables"
 alembic upgrade head
+python -m app.scripts.seed
 ```
+
+시드 명령은 여러 번 실행해도 `Company A`, 관리자 사용자, 기본 공급사, `SKU-001` 상품을 중복 생성하지 않습니다. 개발용 관리자 비밀번호 값은 인증 구현 전 임시 데이터이며 운영 환경에서 사용하면 안 됩니다.
 
 ## API 요약
 
