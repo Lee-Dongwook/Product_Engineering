@@ -1,3 +1,0 @@
-module.exports=[[33290,a=>{var b=a.i(1863);a.s(["default",0,function({children:a}){return(0,b.jsx)("html",{lang:"ko",children:(0,b.jsx)("body",{className:"min-h-screen bg-slate-50 text-slate-900 antialiased",children:a})})},"metadata",0,{title:"SCM Inventory Optimization Platform",description:"AI-driven inventory forecasting and multi-agent purchase order management"}])},17910,(a,b,c)=>{b.exports=a.r(18622)},1863,(a,b,c)=>{b.exports=a.r(17910).vendored["react-rsc"].ReactJsxRuntime}],18622,(a,b,c)=>{b.exports=a.x("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js",()=>require("next/dist/compiled/next-server/app-page-turbo.runtime.prod.js"))},70864,function(a){a.n(a.i(33290))}];
-
-//# sourceMappingURL=%5Broot-of-the-server%5D__0ys9yieiuzbef._.js.map

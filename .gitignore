@@ -53,3 +53,4 @@ postgres_data/
 # Frontend
 node_modules/
 !frontend/lib/
+frontend/.next/
