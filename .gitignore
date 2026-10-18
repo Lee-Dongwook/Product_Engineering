@@ -49,3 +49,7 @@ htmlcov/
 # Docker & Database local data
 postgres_data/
 *.log
+
+# Frontend
+node_modules/
+!frontend/lib/
