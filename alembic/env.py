@@ -15,6 +15,7 @@ from app.models.product import Product
 from app.models.inventory import InventoryLog
 from app.models.purchase_order import PurchaseOrder
 from app.models.order_decision_event import OrderDecisionEvent
+from app.models.sales_record import SalesRecord
 from app.core.config import settings
 
 # this is the Alembic Config object, which provides
