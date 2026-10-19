@@ -12,7 +12,7 @@ from app.core.security import (
 from app.models.tenant import User
 from app.schemas.auth import TokenResponse, UserMeResponse
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter()
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
