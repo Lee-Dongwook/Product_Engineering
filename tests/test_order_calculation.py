@@ -47,3 +47,26 @@ async def test_supervisor_rejects_invalid_moq(moq):
                 "moq": moq,
             }
         )
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "missing_field",
+    [
+        "predicted_demand",
+        "current_stock",
+        "safety_stock",
+        "moq",
+    ],
+)
+async def test_supervisor_rejects_missing_required_input(missing_field):
+    state = {
+        "predicted_demand": 20,
+        "current_stock": 5,
+        "safety_stock": 10,
+        "moq": 10,
+    }
+    del state[missing_field]
+
+    with pytest.raises(ValueError, match=missing_field):
+        await supervisor_node(state)
+

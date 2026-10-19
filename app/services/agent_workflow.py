@@ -97,10 +97,22 @@ async def supplier_analysis_node(state: SCMState) -> Dict[str, Any]:
 
 async def supervisor_node(state: SCMState) -> Dict[str, Any]:
     print("--- [Supervisor Agent] 최종 발주 수량 산정 및 리포트 작성 중 ---")
-    current_stock = state.get("current_stock", 0)
-    safety_stock = state.get("safety_stock", 10)
-    predicted_demand = state.get("predicted_demand", 20)
-    moq = state.get("moq", 1)
+    required_fields = [
+        "predicted_demand",
+        "current_stock",
+        "safety_stock",
+        "moq",
+    ]
+
+    for field in required_fields:
+        if field not in state or state[field] is None:
+            raise ValueError(f"필수 입력값 누락: {field}")
+    
+
+    current_stock = state["current_stock"]
+    safety_stock = state["safety_stock"]
+    predicted_demand = state["predicted_demand"]
+    moq = state["moq"]
 
     if moq <= 0:
         raise ValueError("MOQ는 1 이상의 정수여야 합니다.")
