@@ -96,6 +96,8 @@ def viewer_user(user_factory) -> User:
 def mock_db(test_user):
     session = MagicMock()
     session.execute = AsyncMock()
+    session.commit = AsyncMock()
+    session.refresh = AsyncMock()
 
     result = MagicMock()
     result.scalar_one_or_none.return_value = test_user

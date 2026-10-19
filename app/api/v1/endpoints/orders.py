@@ -29,7 +29,7 @@ router = APIRouter()
 async def run_inventory_prediction(
     product_id: int, 
     db: AsyncSession = Depends(get_db), 
-    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER]))
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER))
 ):
     try:
         return await execute_inventory_prediction(
@@ -74,7 +74,7 @@ async def decide_purchase_order(
     purchase_order_id: int,
     decision: PurchaseOrderDecision,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER])),
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
 ):
     result = await db.execute(
         select(PurchaseOrder).where(

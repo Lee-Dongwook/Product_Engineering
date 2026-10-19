@@ -42,7 +42,7 @@ async def get_product(
 async def create_product(
     product_in: ProductCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER]))
+    current_user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER))
 ):
     product = Product(
         **product_in.model_dump(exclude={"tenant_id"}),

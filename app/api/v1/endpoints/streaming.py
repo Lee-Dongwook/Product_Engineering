@@ -26,7 +26,7 @@ async def agent_stream_endpoint(
     product_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(
-        require_roles([UserRole.ADMIN, UserRole.MANAGER])
+        require_roles(UserRole.ADMIN, UserRole.MANAGER)
     ),
 ):
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
