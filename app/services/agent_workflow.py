@@ -1,5 +1,5 @@
 import operator
-from typing import Annotated, TypedDict, List, Dict, Any
+from typing import Annotated, TypedDict, List, Dict, Any, Callable, Awaitable
 from langgraph.graph import StateGraph, END
 
 class SCMState(TypedDict):
@@ -23,11 +23,36 @@ class WorkflowNodeError(Exception):
         self.node_id = node_id
         super().__init__(f"Workflow node failed: {node_id}")
 
-def track_node(node_id: str, node_func):
+StepCallback = Callable[
+    [str, str, str],
+    Awaitable[None],
+]
+
+def track_node(node_id: str, node_func,  on_step: StepCallback | None = None,):
     async def wrapped(state: SCMState) -> Dict[str, Any]:
+        if on_step:
+            await on_step(
+                node_id,
+                "processing",
+                f"{node_id} 실행을 시작했습니다.",
+            )
+
         try:
-            return await node_func(state)
+            result = await node_func(state)
+            if on_step:
+                message = (
+                    result.get("messages", ["단계 실행을 완료했습니다."])[-1]
+                )
+                await on_step(node_id, "completed", message)
+
+            return result
         except Exception as exc:
+            if on_step:
+                await on_step(
+                    node_id,
+                    "error",
+                    "단계 실행 중 오류가 발생했습니다.",
+                )
             raise WorkflowNodeError(node_id) from exc
     return wrapped
 
@@ -77,12 +102,14 @@ async def supervisor_node(state: SCMState) -> Dict[str, Any]:
         "messages": [f"Supervisor Agent: 최종 발주 제안 수량 {suggested_qty}개 확정."]
     }
 
-def create_scm_agent_workflow():
+def create_scm_agent_workflow(
+    on_step: StepCallback | None = None,
+):
     workflow = StateGraph(SCMState)
 
-    workflow.add_node("demand_agent", track_node("demand_agent", demand_prediction_node),)
-    workflow.add_node("supplier_agent", track_node("supplier_agent", supplier_analysis_node),)
-    workflow.add_node("supervisor", track_node("supervisor", supervisor_node),)
+    workflow.add_node("demand_agent", track_node("demand_agent", demand_prediction_node, on_step),)
+    workflow.add_node("supplier_agent", track_node("supplier_agent", supplier_analysis_node, on_step),)
+    workflow.add_node("supervisor", track_node("supervisor", supervisor_node, on_step),)
 
     workflow.set_entry_point("demand_agent")
     workflow.add_edge("demand_agent", "supplier_agent")
