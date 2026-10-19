@@ -143,4 +143,72 @@ async def test_prediction_service_uses_calculated_quantity_consistently(monkeypa
         "moq_rounding_applied": True,
     }
 
+@pytest.mark.asyncio
+async def test_prediction_service_raises_when_persisted_quantity_differs(
+    monkeypatch,
+):
+    product = SimpleNamespace(
+        id=101,
+        current_stock=5,
+        safety_stock=10,
+        lead_time_days=7,
+        moq=10,
+    )
+    draft_order = SimpleNamespace(
+        id=77,
+        suggested_qty=20,
+        reasoning_summary="MOQ 단위로 산출",
+    )
 
+    monkeypatch.setattr(
+        prediction_service.InventoryService,
+        "get_product_with_inventory",
+        AsyncMock(return_value=product),
+    )
+
+    create_draft = AsyncMock(return_value=draft_order)
+    monkeypatch.setattr(
+        prediction_service.InventoryService,
+        "create_purchase_order_draft",
+        create_draft,
+    )
+
+    class FakeWorkflow:
+        async def astream(self, initial_state, stream_mode):
+            yield {
+                "demand_agent": {
+                    "average_sales": 20,
+                    "forecast_multiplier": 1.2,
+                    "predicted_demand": 24,
+                    "messages": [],
+                }
+            }
+            yield {
+                "supplier_agent": {
+                    "required_order_timing": "즉시 발주 필요",
+                    "messages": [],
+                }
+            }
+            yield {
+                "supervisor": {
+                    "net_required": 29,
+                    "suggested_qty": 30,
+                    "reasoning_summary": "MOQ 단위로 산출",
+                    "messages": [],
+                }
+            }
+
+    monkeypatch.setattr(
+        prediction_service,
+        "create_scm_agent_workflow",
+        lambda **kwargs: FakeWorkflow(),
+    )
+
+    with pytest.raises(RuntimeError, match="발주 수량 불일치"):
+        await prediction_service.execute_inventory_prediction(
+            db=AsyncMock(),
+            product_id=101,
+            tenant_id=1,
+        )
+
+    create_draft.assert_awaited_once()

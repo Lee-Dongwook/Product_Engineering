@@ -1,6 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+from app.models.product import Product
+from app.models.tenant import Tenant, User
 from app.models.purchase_order import PurchaseOrder
 from app.models.workflow_execution import WorkflowExecution
 from app.services.summarize_step_output import summarize_step_output
@@ -101,6 +103,18 @@ async def test_workflow_execution_service_lifecycle():
     assert execution.steps[0]["status"] == "COMPLETED"
     assert execution.steps[0]["output"] == {"predicted_demand": 20}
     assert execution.steps[0]["message"] == "시작"
+
+    await service.update_step(
+        execution_id=execution.execution_id,
+        step_id="demand_agent",
+        status="COMPLETED",
+        message="수요 예측 완료",
+    )
+
+    assert len(execution.steps) == 1
+    assert execution.steps[0]["status"] == "COMPLETED"
+    assert execution.steps[0]["message"] == "수요 예측 완료"
+    assert execution.steps[0]["output"] == {"predicted_demand": 20}
 
     # 4. complete
     await service.complete(
@@ -247,3 +261,80 @@ async def test_run_tracked_workflow_failure(monkeypatch):
     assert "demand_agent" in str(exc_info.value)
     assert execution.status == "FAILED"
     assert "Workflow node failed: demand_agent" in execution.error_message
+
+    failed_step = next(
+        step for step in execution.steps
+        if step["id"] == "demand_agent"
+    )   
+
+    assert failed_step["status"] == "ERROR"
+    assert failed_step["message"] == "단계 실행 중 오류가 발생했습니다."
+
+def test_summarize_step_output_omits_missing_fields():
+    raw = {
+        "average_sales": 20,
+        "predicted_demand": 24,
+        "messages": ["내부 실행 로그"],
+    }
+
+    summary = summarize_step_output("demand_agent", raw)
+
+    assert summary == {
+        "average_sales": 20,
+        "predicted_demand": 24,
+    }
+    assert "messages" not in summary
+    assert "forecast_multiplier" not in summary
+
+
+@pytest.mark.asyncio
+async def test_run_tracked_workflow_purchase_order_creation_failure(monkeypatch):
+    mock_db = MagicMock()
+    mock_db.commit = AsyncMock()
+    mock_db.refresh = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_db.execute = AsyncMock()
+
+    service = WorkflowExecutionService(mock_db)
+
+    execution = WorkflowExecution(
+        execution_id="test-exec-order-fail",
+        product_id=101,
+        status="RUNNING",
+        steps=[],
+    )
+    service.start = AsyncMock(return_value=execution)
+
+    result_mock = MagicMock()
+    result_mock.scalar_one.return_value = execution
+    mock_db.execute.return_value = result_mock
+
+    async def fail_create_order(*args, **kwargs):
+        raise RuntimeError("simulated purchase order creation failure")
+
+    monkeypatch.setattr(
+        "app.services.inventory_service.InventoryService.create_purchase_order_draft",
+        fail_create_order,
+    )
+
+    initial_state = {
+        "current_stock": 5,
+        "safety_stock": 10,
+        "sales_history": [10, 15, 20, 25],
+        "lead_time_days": 7,
+        "moq": 10,
+    }
+
+    with pytest.raises(RuntimeError, match="simulated purchase order creation failure"):
+        await run_tracked_workflow(
+            product_id=101,
+            initial_state=initial_state,
+            execution_service=service,
+            publish_sse=None,
+            db=mock_db,
+            tenant_id=1,
+        )
+
+    assert execution.status == "FAILED"
+    assert execution.error_message == "simulated purchase order creation failure"
+    assert execution.purchase_order_id is None
