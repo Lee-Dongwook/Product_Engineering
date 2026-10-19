@@ -25,7 +25,12 @@ scm_workflow = create_scm_agent_workflow()
 def build_workflow_steps(
     workflow_result: dict,
     initial_state: dict,
+    completed_step_ids: set[str] | None = None,
+    failed_step_id: str | None = None,
+    error_message: str | None = None,
 ) -> list[dict]:
+    completed_step_ids = completed_step_ids or set()
+    
     messages = workflow_result.get("messages", [])
     message_by_agent = {
         "demand_agent": "예상 수요량을 산출했습니다.",
@@ -50,10 +55,9 @@ def build_workflow_steps(
     lead_time = initial_state.get("lead_time_days", 7)
     moq = initial_state.get("moq", 1)
 
-    return [
+    steps = [
         {
             "id": "demand_agent",
-            "status": "completed",
             "message": message_by_agent["demand_agent"],
             "input_summary": (
                 f"판매 이력 {len(initial_state.get('sales_history', []))}개 항목"
@@ -62,14 +66,12 @@ def build_workflow_steps(
         },
         {
             "id": "supplier_agent",
-            "status": "completed",
             "message": message_by_agent["supplier_agent"],
             "input_summary": f"공급 리드타임 {lead_time}일",
             "output_summary": timing,
         },
         {
             "id": "supervisor",
-            "status": "completed",
             "message": message_by_agent["supervisor"],
             "input_summary": (
                 f"현재 재고 {current_stock}개 · "
@@ -80,6 +82,20 @@ def build_workflow_steps(
             "output_summary": f"최종 발주 제안 수량 {suggested_qty}개",
         },
     ]
+
+    for step in steps:
+        step_id = step["id"]
+
+        if step_id in completed_step_ids:
+            step["status"] = "completed"
+        elif step_id == failed_step_id:
+            step["status"] = "error"
+            step["message"] = error_message or "단계 실행에 실패했습니다."
+        else:
+            step["status"] = "pending"
+        
+    
+    return steps
 
 @router.post("/run-prediction/{product_id}", response_model=PurchaseOrderProposalResponse)
 async def run_inventory_prediction(
@@ -144,7 +160,7 @@ async def run_inventory_prediction(
             },
             "demand": {
                 "average_sales": workflow_result.get("average_sales", 0),
-                "forecase_multiplier": workflow_result.get(
+                "forecast_multiplier": workflow_result.get(
                     "forecast_multiplier", 1.2
                 ),
                 "predicted_demand": predicted_demand,
