@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetcher } from "@/lib/api";
+import { fetcher, ApiError } from "@/lib/api";
 
 interface Product {
   id: number;
@@ -26,6 +26,12 @@ interface WorkflowStep {
   message: string;
   input_summary?: string;
   output_summary?: string;
+}
+
+interface WorkflowFailureDetail {
+  failed_step_id: WorkflowStepId;
+  completed_step_ids: WorkflowStepId[];
+  message: string;
 }
 
 interface DecisionBasis {
@@ -203,14 +209,40 @@ export default function OrderApprovalPage() {
         },
       ]);
     } catch (err) {
+      const failure =
+        err instanceof ApiError &&
+        err.detail !== null &&
+        typeof err.detail === "object"
+          ? (err.detail as Partial<WorkflowFailureDetail>)
+          : null;
+
+      const failedStepId = failure?.failed_step_id;
+      const completedStepIds = new Set(failure?.completed_step_ids ?? []);
+
       const message =
-        err instanceof Error ? err.message : "발주 예측에 실패했습니다.";
+        failure?.message ??
+        (err instanceof Error ? err.message : "발주 예측에 실패했습니다.");
 
       setError(message);
 
       setWorkflowSteps((steps) =>
         steps.map((step) => {
-          if (AI_STEP_IDS.includes(step.id)) {
+          if (step.id === "operator_decision") {
+            return {
+              ...step,
+              status: "pending",
+              message: "발주 예측 실패로 운영자 결정을 진행할 수 없습니다.",
+            };
+          }
+
+          if (completedStepIds.has(step.id)) {
+            return {
+              ...step,
+              status: "completed",
+            };
+          }
+
+          if (step.id === failedStepId) {
             return {
               ...step,
               status: "error",
@@ -221,10 +253,13 @@ export default function OrderApprovalPage() {
           return {
             ...step,
             status: "pending",
-            message: "발주 예측 실패로 운영자 결정을 진행할 수 없습니다.",
           };
         }),
       );
+
+      if (failedStepId) {
+        setSelectedStepId(failedStepId);
+      }
     } finally {
       setSubmitting(false);
     }
