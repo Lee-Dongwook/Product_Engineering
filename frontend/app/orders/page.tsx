@@ -28,6 +28,29 @@ interface WorkflowStep {
   output_summary?: string;
 }
 
+interface DecisionBasis {
+  inputs: {
+    current_stock: number;
+    safety_stock: number;
+    sales_history: number[];
+    lead_time_days: number;
+    moq: number;
+  };
+  demand: {
+    average_sales: number;
+    forecast_multiplier: number;
+    predicted_demand: number;
+  };
+  quantity_calculation: {
+    net_required: number;
+    suggested_qty: number;
+    moq_rounding_applied: boolean;
+  };
+  supply: {
+    required_order_timing: string;
+  };
+}
+
 interface OrderProposal {
   purchase_order_id: number;
   product_id: number;
@@ -35,6 +58,7 @@ interface OrderProposal {
   reasoning_summary: string;
   execution_logs?: string[];
   workflow_steps: WorkflowStep[];
+  decision_basis: DecisionBasis;
 }
 
 const WORKFLOW_LABELS: Record<WorkflowStepId, string> = {
@@ -408,47 +432,188 @@ export default function OrderApprovalPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-2 text-sm text-gray-500">
-              AI 근거 요약: {proposal.reasoning_summary}
-            </p>
-            <p className="mb-4 text-sm text-gray-500">
-              현재 재고: {selectedProduct.current_stock}개
-            </p>
-            <div className="flex flex-wrap items-center gap-4">
-              <span>
-                제안 수량: <strong>{proposal.suggested_qty}개</strong>
-              </span>
-              <label className="flex items-center gap-2">
-                최종 수량
-                <input
-                  className="w-20 rounded border border-gray-300 p-2"
-                  min="0"
-                  type="number"
-                  value={finalQty}
-                  onChange={(event) => setFinalQty(Number(event.target.value))}
-                />
-              </label>
-              <Button
-                disabled={submitting || decisionStep?.status === "completed"}
-                onClick={() => handleDecision("APPROVED")}
-              >
-                승인
-              </Button>
-              <Button
-                disabled={submitting || decisionStep?.status === "completed"}
-                variant="outline"
-                onClick={() => handleDecision("MODIFIED")}
-              >
-                수량 수정
-              </Button>
-              <Button
-                disabled={submitting || decisionStep?.status === "completed"}
-                variant="destructive"
-                onClick={() => handleDecision("REJECTED")}
-              >
-                거절
-              </Button>
-            </div>
+            {(() => {
+              const basis = proposal.decision_basis;
+              const inputs = basis.inputs;
+              const demand = basis.demand;
+              const quantity = basis.quantity_calculation;
+              const supply = basis.supply;
+
+              return (
+                <div className="space-y-6">
+                  {/* AI 제안 요약 */}
+                  <section>
+                    <h3 className="mb-2 font-semibold">AI 발주 제안</h3>
+                    <p className="text-sm text-gray-600">
+                      {proposal.reasoning_summary}
+                    </p>
+                  </section>
+
+                  {/* 실제 실행 입력 */}
+                  <section>
+                    <h3 className="mb-3 font-semibold">계산에 사용한 데이터</h3>
+
+                    <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <div>
+                        <dt className="text-sm text-gray-500">현재 재고</dt>
+                        <dd className="mt-1 font-medium">
+                          {inputs.current_stock}개
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt className="text-sm text-gray-500">안전재고</dt>
+                        <dd className="mt-1 font-medium">
+                          {inputs.safety_stock}개
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt className="text-sm text-gray-500">공급 리드타임</dt>
+                        <dd className="mt-1 font-medium">
+                          {inputs.lead_time_days}일
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt className="text-sm text-gray-500">
+                          최소 주문 수량(MOQ)
+                        </dt>
+                        <dd className="mt-1 font-medium">{inputs.moq}개</dd>
+                      </div>
+
+                      <div>
+                        <dt className="text-sm text-gray-500">판매 이력</dt>
+                        <dd className="mt-1 font-medium">
+                          {inputs.sales_history.join(" · ")}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  {/* 수요 예측 */}
+                  <section>
+                    <h3 className="mb-3 font-semibold">수요 예측 결과</h3>
+
+                    <dl className="grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <dt className="text-sm text-gray-500">평균 판매량</dt>
+                        <dd className="mt-1 text-lg font-semibold">
+                          {demand.average_sales.toLocaleString("ko-KR", {
+                            maximumFractionDigits: 2,
+                          })}
+                          개
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt className="text-sm text-gray-500">예측 배율</dt>
+                        <dd className="mt-1 text-lg font-semibold">
+                          ×{demand.forecast_multiplier}
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt className="text-sm text-gray-500">예상 수요</dt>
+                        <dd className="mt-1 text-lg font-semibold">
+                          {demand.predicted_demand}개
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  {/* 발주 수량 산출 */}
+                  <section className="rounded-lg border p-4">
+                    <h3 className="mb-3 font-semibold">발주 수량 산출</h3>
+
+                    <dl className="grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <dt className="text-sm text-gray-500">
+                          MOQ 적용 전 필요 수량
+                        </dt>
+                        <dd className="mt-1 text-lg font-semibold">
+                          {quantity.net_required}개
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt className="text-sm text-gray-500">AI 제안 수량</dt>
+                        <dd className="mt-1 text-lg font-semibold">
+                          {quantity.suggested_qty}개
+                        </dd>
+                      </div>
+
+                      <div>
+                        <dt className="text-sm text-gray-500">MOQ 반영</dt>
+                        <dd className="mt-1 font-medium">
+                          {quantity.moq_rounding_applied
+                            ? "수량 조정 적용"
+                            : "추가 수량 조정 없음"}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    <p className="mt-3 text-sm text-gray-600">
+                      {supply.required_order_timing ||
+                        "발주 시점 정보가 없습니다."}
+                    </p>
+                  </section>
+
+                  {/* 운영자 결정: 기존 기능 유지 */}
+                  <section>
+                    <h3 className="mb-3 font-semibold">운영자 결정</h3>
+
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="flex items-center gap-2">
+                        최종 수량
+                        <input
+                          className="w-24 rounded border border-gray-300 p-2"
+                          min="0"
+                          step="1"
+                          type="number"
+                          value={finalQty}
+                          onChange={(event) =>
+                            setFinalQty(Number(event.target.value))
+                          }
+                          disabled={
+                            submitting || decisionStep?.status === "completed"
+                          }
+                        />
+                      </label>
+
+                      <Button
+                        disabled={
+                          submitting || decisionStep?.status === "completed"
+                        }
+                        onClick={() => handleDecision("APPROVED")}
+                      >
+                        승인
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        disabled={
+                          submitting || decisionStep?.status === "completed"
+                        }
+                        onClick={() => handleDecision("MODIFIED")}
+                      >
+                        수량 수정
+                      </Button>
+
+                      <Button
+                        variant="destructive"
+                        disabled={
+                          submitting || decisionStep?.status === "completed"
+                        }
+                        onClick={() => handleDecision("REJECTED")}
+                      >
+                        거절
+                      </Button>
+                    </div>
+                  </section>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       )}

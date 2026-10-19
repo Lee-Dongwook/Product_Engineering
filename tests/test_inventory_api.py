@@ -122,3 +122,32 @@ async def test_scm_agent_workflow():
     assert result["suggested_qty"] > 0
     assert "Supervisor Agent" in result["messages"][-1]
     assert "Demand Agent" in result["messages"][0]
+
+@pytest.mark.asyncio
+async def test_scm_agent_workflow_returns_decision_basis():
+    workflow = create_scm_agent_workflow()
+
+    initial_state = {
+        "product_id": 1,
+        "current_stock": 5,
+        "safety_stock": 10,
+        "sales_history": [12, 18, 22, 30],
+        "lead_time_days": 7,
+        "moq": 10,
+        "predicted_demand": 0,
+        "required_order_timing": "",
+        "suggested_qty": 0,
+        "reasoning_summary": "",
+        "messages": [],
+        "average_sales": 0.0,
+        "forecast_multiplier": 1.2,
+        "net_required": 0,
+    }
+
+    result = await workflow.ainvoke(initial_state)
+
+    assert result["average_sales"] == 20.5
+    assert result["forecast_multiplier"] == 1.2
+    assert result["predicted_demand"] == 24
+    assert result["net_required"] == 29
+    assert result["suggested_qty"] == 30

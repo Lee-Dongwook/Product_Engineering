@@ -16,6 +16,7 @@ from app.schemas.purchase_order import (
     DecisionMetricsResponse,
     PurchaseOrderDecision,
     PurchaseOrderResponse,
+    PurchaseOrderProposalResponse,
 )
 
 router = APIRouter()
@@ -80,7 +81,7 @@ def build_workflow_steps(
         },
     ]
 
-@router.post("/run-prediction/{product_id}")
+@router.post("/run-prediction/{product_id}", response_model=PurchaseOrderProposalResponse)
 async def run_inventory_prediction(
     product_id: int, 
     db: AsyncSession = Depends(get_db), 
@@ -112,6 +113,8 @@ async def run_inventory_prediction(
     workflow_result = await scm_workflow.ainvoke(initial_state)
     suggested_qty = workflow_result.get("suggested_qty", 0)
     reasoning_summary = workflow_result.get("reasoning_summary", "")
+    predicted_demand = workflow_result.get("predicted_demand", 0)
+    net_required = workflow_result.get("net_required", 0)
 
     draft_order = await InventoryService.create_purchase_order_draft(
         db=db,
@@ -130,7 +133,36 @@ async def run_inventory_prediction(
         "workflow_steps": build_workflow_steps(
             workflow_result,
             initial_state,
-        )
+        ),
+        "decision_basis": {
+            "inputs": {
+                "current_stock": initial_state["current_stock"],
+                "safety_stock": initial_state["safety_stock"],
+                "sales_history": initial_state["sales_history"],
+                "lead_time_days": initial_state["lead_time_days"],
+                "moq": initial_state["moq"],
+            },
+            "demand": {
+                "average_sales": workflow_result.get("average_sales", 0),
+                "forecase_multiplier": workflow_result.get(
+                    "forecast_multiplier", 1.2
+                ),
+                "predicted_demand": predicted_demand,
+            },
+            "quantity_calculation": {
+                "net_required": net_required,
+                "suggested_qty": draft_order.suggested_qty,
+                "moq_rounding_applied": (
+                    net_required > 0
+                    and draft_order.suggested_qty != net_required
+                ),
+            },
+            "supply": {
+                "required_order_timing": workflow_result.get(
+                    "required_order_timing", ""
+                ),
+            },
+        },
     }
 
 

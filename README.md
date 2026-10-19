@@ -184,6 +184,22 @@ curl -X POST http://localhost:8000/api/v1/orders/run-prediction/1
 
 필요 수량이 0 이하이면 추가 발주를 제안하지 않습니다. 실제 예측 모델이나 외부 데이터 연동 전의 검증용 로직입니다.
 
+### 발주 제안 API 응답
+
+`POST /api/v1/orders/run-prediction/{product_id}`는
+발주 초안과 함께 다음 데이터를 반환합니다.
+
+- `suggested_qty`: 최종 발주 제안 수량
+- `reasoning_summary`: 발주 판단 요약
+- `workflow_steps`: 단계별 워크플로우 정보
+- `decision_basis.inputs`: 실행에 사용한 재고, 판매 이력, 리드타임, MOQ
+- `decision_basis.demand`: 평균 판매량, 예측 배율, 예상 수요
+- `decision_basis.quantity_calculation`: 필요 수량과 최종 제안 수량
+- `decision_basis.supply`: 리드타임 기반 발주 시점 안내
+
+프론트엔드는 구조화된 `decision_basis`를 이용해 근거를 표시하며,
+문자열 로그를 파싱해 계산값을 추출하지 않습니다.
+
 ## 테스트
 
 백엔드 의존성을 설치한 환경에서 실행합니다.

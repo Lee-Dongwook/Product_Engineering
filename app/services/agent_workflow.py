@@ -14,13 +14,19 @@ class SCMState(TypedDict):
     suggested_qty: int
     reasoning_summary: str
     messages: Annotated[List[str], operator.add]
+    average_sales: float
+    forecast_multiplier: float
+    net_required: int
 
 async def demand_prediction_node(state: SCMState) -> Dict[str, Any]:
     sales = state.get("sales_history", [10, 12, 15, 20])
     avg_sales = sum(sales) / len(sales) if sales else 10
-    predicted_demand = int(avg_sales * 1.2)
+    forecast_multiplier = 1.2
+    predicted_demand = int(avg_sales * forecast_multiplier)
 
     return {
+        "average_sales": avg_sales,
+        "forecast_multiplier": forecast_multiplier,
         "predicted_demand": predicted_demand,
         "messages": ["Demand Agent: 예상 월간 수요량을 산출했습니다."]
     }
@@ -52,6 +58,7 @@ async def supervisor_node(state: SCMState) -> Dict[str, Any]:
         reasoning = f"예상 수요({predicted_demand})와 안전재고({safety_stock}) 확보를 위해 MOQ({moq}) 단위로 최적 산출되었습니다."
     
     return {
+        "net_required": net_required,
         "suggested_qty": suggested_qty,
         "reasoning_summary": reasoning,
         "messages": [f"Supervisor Agent: 최종 발주 제안 수량 {suggested_qty}개 확정."]
