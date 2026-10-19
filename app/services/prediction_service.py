@@ -18,7 +18,10 @@ def build_workflow_steps(
     failed_step_id: str | None = None,
     error_message: str | None = None,
 ) -> list[dict]:
-    completed_step_ids = completed_step_ids or set()
+    # A result supplied without execution metadata is a completed workflow.
+    # An explicit empty set is used while streaming before any step finishes.
+    if completed_step_ids is None:
+        completed_step_ids = {"demand_agent", "supplier_agent", "supervisor"}
 
     message_by_agent = {
         "demand_agent": "예상 수요량을 산출했습니다.",
@@ -49,17 +52,17 @@ def build_workflow_steps(
         {
             "id": "supplier_agent",
             "message": message_by_agent["supplier_agent"],
-            "input_summary": f"공급 리드타임 {initial_state['lead_time_days']}일",
+            "input_summary": f"공급 리드타임 {initial_state.get('lead_time_days', 7)}일",
             "output_summary": workflow_result.get("required_order_timing", ""),
         },
         {
             "id": "supervisor",
             "message": message_by_agent["supervisor"],
             "input_summary": (
-                f"현재 재고 {initial_state['current_stock']}개 · "
-                f"안전재고 {initial_state['safety_stock']}개 · "
+                f"현재 재고 {initial_state.get('current_stock', 0)}개 · "
+                f"안전재고 {initial_state.get('safety_stock', 0)}개 · "
                 f"예상 수요 {predicted_demand}개 · "
-                f"MOQ {initial_state['moq']}개"
+                f"MOQ {initial_state.get('moq', 1)}개"
             ),
             "output_summary": f"최종 발주 제안 수량 {suggested_qty}개",
         },
@@ -164,11 +167,11 @@ async def execute_inventory_prediction(
         ),
         "decision_basis": {
             "inputs": {
-                "current_stock": initial_state["current_stock"],
-                "safety_stock": initial_state["safety_stock"],
-                "sales_history": initial_state["sales_history"],
-                "lead_time_days": initial_state["lead_time_days"],
-                "moq": initial_state["moq"],
+                "current_stock": initial_state.get("current_stock", 0),
+                "safety_stock": initial_state.get("safety_stock", 0),
+                "sales_history": initial_state.get("sales_history", []),
+                "lead_time_days": initial_state.get("lead_time_days", 7),
+                "moq": initial_state.get("moq", 1),
             },
             "demand": {
                 "average_sales": workflow_result.get("average_sales", 0),

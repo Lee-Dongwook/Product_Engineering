@@ -1,3 +1,4 @@
+import inspect
 import operator
 from typing import Annotated, TypedDict, List, Dict, Any, Callable, Awaitable
 from langgraph.graph import StateGraph, END
@@ -25,22 +26,24 @@ class WorkflowNodeError(Exception):
 
 StepCallback = Callable[
     [str, str, str],
-    Awaitable[None],
+    Any,
 ]
 
 StepResultCallback = Callable[
     [str, Dict[str, Any]],
-    Awaitable[None],
+    Any,
 ]
 
 def track_node(node_id: str, node_func, on_step: StepCallback | None = None, on_step_result: StepResultCallback | None = None,):
     async def wrapped(state: SCMState) -> Dict[str, Any]:
         if on_step:
-            await on_step(
+            res = on_step(
                 node_id,
                 "processing",
                 f"{node_id} 실행을 시작했습니다.",
             )
+            if inspect.isawaitable(res):
+                await res
 
         try:
             result = await node_func(state)
@@ -48,18 +51,24 @@ def track_node(node_id: str, node_func, on_step: StepCallback | None = None, on_
                 message = (
                     result.get("messages", ["단계 실행을 완료했습니다."])[-1]
                 )
-                await on_step(node_id, "completed", message)
+                res = on_step(node_id, "completed", message)
+                if inspect.isawaitable(res):
+                    await res
             if on_step_result:
-                await on_step_result(node_id, result)
+                res = on_step_result(node_id, result)
+                if inspect.isawaitable(res):
+                    await res
 
             return result
         except Exception as exc:
             if on_step:
-                await on_step(
+                res = on_step(
                     node_id,
                     "error",
                     "단계 실행 중 오류가 발생했습니다.",
                 )
+                if inspect.isawaitable(res):
+                    await res
             raise WorkflowNodeError(node_id) from exc
     return wrapped
 
