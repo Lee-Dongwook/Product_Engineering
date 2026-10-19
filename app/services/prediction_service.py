@@ -141,10 +141,28 @@ async def execute_inventory_prediction(
             completed_step_ids=completed_step_ids,
         ) from exc
     
-    suggested_qty = workflow_result.get("suggested_qty", 0)
-    reasoning_summary = workflow_result.get("reasoning_summary", "")
-    predicted_demand = workflow_result.get("predicted_demand", 0)
-    net_required = workflow_result.get("net_required", 0)
+    required_result_fields = (
+    "suggested_qty",
+    "reasoning_summary",
+    "predicted_demand",
+    "net_required",
+    )
+
+    for field in required_result_fields:
+        if field not in workflow_result or workflow_result[field] is None:
+            raise RuntimeError(f"워크플로 결과 필수값 누락: {field}")
+    
+    suggested_qty = workflow_result["suggested_qty"]
+    reasoning_summary = workflow_result["reasoning_summary"]
+    predicted_demand = workflow_result["predicted_demand"]
+    net_required = workflow_result["net_required"]
+
+    if (
+        not isinstance(suggested_qty, int)
+        or isinstance(suggested_qty, bool)
+        or suggested_qty < 0
+    ):
+        raise RuntimeError("워크플로 발주 수량은 0 이상의 정수여야 합니다.")
 
     draft_order = await InventoryService.create_purchase_order_draft(
         db=db,
@@ -153,6 +171,13 @@ async def execute_inventory_prediction(
         reasoning=reasoning_summary,
         tenant_id=tenant_id,
     )
+
+    if draft_order.suggested_qty != suggested_qty:
+        raise RuntimeError(
+            "발주 수량 불일치: "
+            f"workflow={suggested_qty}, "
+            f"persisted={draft_order.suggested_qty}"
+        )
 
     return {
         "purchase_order_id": draft_order.id,
@@ -182,10 +207,9 @@ async def execute_inventory_prediction(
             },
             "quantity_calculation": {
                 "net_required": net_required,
-                "suggested_qty": draft_order.suggested_qty,
+                "suggested_qty": suggested_qty,
                 "moq_rounding_applied": (
-                    net_required > 0
-                    and draft_order.suggested_qty != net_required
+                    net_required > 0 and suggested_qty != net_required
                 ),
             },
             "supply": {

@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.agent_workflow import supervisor_node
+from app.services.agent_workflow import supervisor_node, demand_prediction_node
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -70,3 +70,56 @@ async def test_supervisor_rejects_missing_required_input(missing_field):
     with pytest.raises(ValueError, match=missing_field):
         await supervisor_node(state)
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "sales_history",
+    [
+        [],
+        [-1, 10, 20],
+        [10, -5, 20],
+    ],
+)
+async def test_demand_prediction_rejects_invalid_sales_history(sales_history):
+    with pytest.raises(ValueError, match="sales_history"):
+        await demand_prediction_node({"sales_history": sales_history})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "predicted_demand",
+        "safety_stock",
+        "current_stock",
+        "moq",
+        "expected_qty",
+        "expected_rounding",
+    ),
+    [
+        (20, 10, 15, 5, 15, False),  # 필요 수량 15, 정확히 MOQ 배수
+        (20, 10, 14, 5, 20, True),   # 필요 수량 16, MOQ 올림
+        (20, 10, 30, 5, 0, False),   # 발주 불필요
+        (20, 10, 20, 5, 10, False),  # 필요 수량 10, 정확히 MOQ 배수
+    ],
+)
+async def test_moq_rounding_matches_calculated_quantity(
+    predicted_demand,
+    safety_stock,
+    current_stock,
+    moq,
+    expected_qty,
+    expected_rounding,
+):
+    result = await supervisor_node(
+        {
+            "predicted_demand": predicted_demand,
+            "safety_stock": safety_stock,
+            "current_stock": current_stock,
+            "moq": moq,
+        }
+    )
+
+    assert result["suggested_qty"] == expected_qty
+    assert (
+        result["net_required"] > 0
+        and result["suggested_qty"] != result["net_required"]
+    ) is expected_rounding

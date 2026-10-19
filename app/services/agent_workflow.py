@@ -73,8 +73,20 @@ def track_node(node_id: str, node_func, on_step: StepCallback | None = None, on_
     return wrapped
 
 async def demand_prediction_node(state: SCMState) -> Dict[str, Any]:
-    sales = state.get("sales_history", [10, 12, 15, 20])
-    avg_sales = sum(sales) / len(sales) if sales else 10
+    if "sales_history" not in state or state["sales_history"] is None:
+        raise ValueError("필수 입력값 누락: sales_history")
+    sales = state["sales_history"]
+
+    if not sales:
+        raise ValueError("sales_history는 비어 있을 수 없습니다.")
+    
+    if any(
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+        for value in sales
+    ):
+        raise ValueError("sales_history는 0 이상의 정수로 구성되어야 합니다.")
+
+    avg_sales = sum(sales) / len(sales)
     forecast_multiplier = 1.2
     predicted_demand = int(avg_sales * forecast_multiplier)
 
