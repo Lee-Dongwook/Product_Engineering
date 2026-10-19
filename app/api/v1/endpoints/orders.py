@@ -21,6 +21,10 @@ from app.schemas.purchase_order import (
     PurchaseOrderResponse,
     PurchaseOrderProposalResponse,
 )
+from app.services.prediction_service import (
+    execute_inventory_prediction,
+    PredictionExecutionError,
+)
 
 router = APIRouter()
 scm_workflow = create_scm_agent_workflow()
@@ -106,118 +110,21 @@ async def run_inventory_prediction(
     db: AsyncSession = Depends(get_db), 
     current_user: User = Depends(require_roles([UserRole.ADMIN, UserRole.MANAGER]))
 ):
-    product = await InventoryService.get_product_with_inventory(
-        db=db, 
-        product_id=product_id, 
-        tenant_id=current_user.tenant_id
-    )
-
-    lead_time = getattr(product, "lead_time_days", 7)
-    moq = getattr(product, "moq", 1)
-
-    initial_state = {
-        "product_id": product.id,
-        "current_stock": product.current_stock,
-        "safety_stock": product.safety_stock,
-        "sales_history": [12, 18, 22, 30],
-        "lead_time_days": lead_time,
-        "moq": moq,
-        "predicted_demand": 0,
-        "required_order_timing": "",
-        "suggested_qty": 0,
-        "reasoning_summary": "",
-        "messages": []
-    }
-
-    completed_step_ids: set[str] = set()
-    workflow_result = dict(initial_state)
-
     try:
-        async for update in scm_workflow.astream(
-            initial_state,
-            stream_mode="updates",
-        ):
-            for node_id, node_output in update.items():
-                if node_id in {
-                    "demand_agent",
-                    "supplier_agent",
-                    "supervisor",
-                }:
-                    completed_step_ids.add(node_id)
-            
-                for key, value in node_output.items():
-                    if key == "messages":
-                        workflow_result[key] = [
-                            *workflow_result.get(key, []),
-                            *value,
-                        ]
-                    else:
-                        workflow_result[key] = value
-    except WorkflowNodeError as exc:
+        return await execute_inventory_prediction(
+            db=db,
+            product_id=product_id,
+            tenant_id=current_user.tenant_id,
+        )
+    except PredictionExecutionError as exc:
         raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail={
-            "failed_step_id": exc.node_id,
-            "completed_step_ids": sorted(completed_step_ids),
-            "message": "발주 예측 처리 중 단계 실행에 실패했습니다.",
-        },
-    ) from exc
-    
-    suggested_qty = workflow_result.get("suggested_qty", 0)
-    reasoning_summary = workflow_result.get("reasoning_summary", "")
-    predicted_demand = workflow_result.get("predicted_demand", 0)
-    net_required = workflow_result.get("net_required", 0)
-
-    draft_order = await InventoryService.create_purchase_order_draft(
-        db=db,
-        product_id=product_id,
-        suggested_qty=suggested_qty,
-        reasoning=reasoning_summary,
-        tenant_id=current_user.tenant_id
-    )
-
-    return {
-        "purchase_order_id": draft_order.id,
-        "product_id": product_id,
-        "suggested_qty": draft_order.suggested_qty,
-        "reasoning_summary": draft_order.reasoning_summary,
-        "execution_logs": workflow_result.get("messages", []),
-        "workflow_steps": build_workflow_steps(
-            workflow_result,
-            initial_state,
-            completed_step_ids=completed_step_ids,
-        ),
-        "decision_basis": {
-            "inputs": {
-                "current_stock": initial_state["current_stock"],
-                "safety_stock": initial_state["safety_stock"],
-                "sales_history": initial_state["sales_history"],
-                "lead_time_days": initial_state["lead_time_days"],
-                "moq": initial_state["moq"],
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "failed_step_id": exc.failed_step_id,
+                "completed_step_ids": sorted(exc.completed_step_ids),
+                "message": str(exc),
             },
-            "demand": {
-                "average_sales": workflow_result.get("average_sales", 0),
-                "forecast_multiplier": workflow_result.get(
-                    "forecast_multiplier", 1.2
-                ),
-                "predicted_demand": predicted_demand,
-            },
-            "quantity_calculation": {
-                "net_required": net_required,
-                "suggested_qty": draft_order.suggested_qty,
-                "moq_rounding_applied": (
-                    net_required > 0
-                    and draft_order.suggested_qty != net_required
-                ),
-            },
-            "supply": {
-                "required_order_timing": workflow_result.get(
-                    "required_order_timing", ""
-                ),
-            },
-        },
-    }
-
+        ) from exc
 
 @router.get("/decision-metrics", response_model=DecisionMetricsResponse)
 async def get_decision_metrics(
