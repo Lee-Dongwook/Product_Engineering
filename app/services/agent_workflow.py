@@ -102,6 +102,18 @@ async def supervisor_node(state: SCMState) -> Dict[str, Any]:
     predicted_demand = state.get("predicted_demand", 20)
     moq = state.get("moq", 1)
 
+    if moq <= 0:
+        raise ValueError("MOQ는 1 이상의 정수여야 합니다.")
+
+    if current_stock < 0:
+        raise ValueError("현재 재고는 0 이상이어야 합니다.")
+
+    if safety_stock < 0:
+        raise ValueError("안전재고는 0 이상이어야 합니다.")
+
+    if predicted_demand < 0:
+        raise ValueError("예상 수요는 0 이상이어야 합니다.")
+
     net_required = (predicted_demand + safety_stock) - current_stock
 
     if net_required <= 0:
