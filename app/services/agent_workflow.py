@@ -18,6 +18,19 @@ class SCMState(TypedDict):
     forecast_multiplier: float
     net_required: int
 
+class WorkflowNodeError(Exception):
+    def __init__(self, node_id: str):
+        self.node_id = node_id
+        super().__init__(f"Workflow node failed: {node_id}")
+
+def track_node(node_id: str, node_func):
+    async def wrapped(state: SCMState) -> Dict[str, Any]:
+        try:
+            return await node_func(state)
+        except Exception as exc:
+            raise WorkflowNodeError(node_id) from exc
+    return wrapped
+
 async def demand_prediction_node(state: SCMState) -> Dict[str, Any]:
     sales = state.get("sales_history", [10, 12, 15, 20])
     avg_sales = sum(sales) / len(sales) if sales else 10
@@ -67,9 +80,9 @@ async def supervisor_node(state: SCMState) -> Dict[str, Any]:
 def create_scm_agent_workflow():
     workflow = StateGraph(SCMState)
 
-    workflow.add_node("demand_agent", demand_prediction_node)
-    workflow.add_node("supplier_agent", supplier_analysis_node)
-    workflow.add_node("supervisor", supervisor_node)
+    workflow.add_node("demand_agent", track_node("demand_agent", demand_prediction_node),)
+    workflow.add_node("supplier_agent", track_node("supplier_agent", supplier_analysis_node),)
+    workflow.add_node("supervisor", track_node("supervisor", supervisor_node),)
 
     workflow.set_entry_point("demand_agent")
     workflow.add_edge("demand_agent", "supplier_agent")

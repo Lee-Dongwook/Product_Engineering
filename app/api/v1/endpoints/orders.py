@@ -4,7 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.core.database import get_db
 from app.services.inventory_service import InventoryService
-from app.services.agent_workflow import create_scm_agent_workflow
+from app.services.agent_workflow import (
+    create_scm_agent_workflow,
+    WorkflowNodeError,
+)
 from app.api.deps import get_current_user, require_roles
 from app.models.tenant import User, UserRole
 from app.models.product import Product
@@ -129,26 +132,36 @@ async def run_inventory_prediction(
     completed_step_ids: set[str] = set()
     workflow_result = dict(initial_state)
 
-    async for update in scm_workflow.astream(
-        initial_state,
-        stream_mode="updates",
-    ):
-        for node_id, node_output in update.items():
-            if node_id in {
-                "demand_agent",
-                "supplier_agent",
-                "supervisor",
-            }:
-                completed_step_ids.add(node_id)
+    try:
+        async for update in scm_workflow.astream(
+            initial_state,
+            stream_mode="updates",
+        ):
+            for node_id, node_output in update.items():
+                if node_id in {
+                    "demand_agent",
+                    "supplier_agent",
+                    "supervisor",
+                }:
+                    completed_step_ids.add(node_id)
             
-            for key, value in node_output.items():
-                if key == "messages":
-                    workflow_result[key] = [
-                        *workflow_result.get(key, []),
-                        *value,
-                    ]
-                else:
-                    workflow_result[key] = value
+                for key, value in node_output.items():
+                    if key == "messages":
+                        workflow_result[key] = [
+                            *workflow_result.get(key, []),
+                            *value,
+                        ]
+                    else:
+                        workflow_result[key] = value
+    except WorkflowNodeError as exc:
+        raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail={
+            "failed_step_id": exc.node_id,
+            "completed_step_ids": sorted(completed_step_ids),
+            "message": "발주 예측 처리 중 단계 실행에 실패했습니다.",
+        },
+    ) from exc
     
     suggested_qty = workflow_result.get("suggested_qty", 0)
     reasoning_summary = workflow_result.get("reasoning_summary", "")
