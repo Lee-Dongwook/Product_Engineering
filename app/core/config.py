@@ -5,6 +5,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://scm_user:scm_pass@localhost:5432/scm_db"
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    JWT_SECRET_KEY: Optional[str] = None
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
     # LangChain / LangSmith Observability
     LANGCHAIN_TRACING_V2: Optional[str] = None
     LANGCHAIN_ENDPOINT: Optional[str] = None

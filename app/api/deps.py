@@ -2,9 +2,10 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
+from sqlalchemy import select
 from app.core.database import get_db
 from app.models.tenant import User, UserRole
+from app.core.security import decode_access_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=False)
 
@@ -12,22 +13,28 @@ async def get_current_user(
     token: Optional[str] = Depends(oauth2_scheme), 
     db: AsyncSession = Depends(get_db)
 ) -> User:
-    user_email = "admin@companyA.com"
-    try:
-        result = await db.execute(select(User).filter(User.email == user_email))
-        user = result.scalars().first()
-    except Exception:
-        user = None
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    if not token:
+        raise unauthorized
+
     
-    if not user:
-        # Development fallback when users table is not yet seeded
-        user = User(
-            id=1,
-            email=user_email,
-            hashed_password="mock_password",
-            role=UserRole.ADMIN,
-            tenant_id=1
-        )
+    try:
+        payload = decode_access_token(token)
+        user_id = int(payload["sub"])
+    except (ValueError, TypeError, KeyError, Exception) as exc:
+        raise unauthorized from exc
+    
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise unauthorized
+    
     return user
 
 
