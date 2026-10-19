@@ -16,7 +16,9 @@
   - Supplier Agent: 리드타임을 고려한 발주 시점 안내
   - Supervisor Agent: 안전재고와 MOQ를 반영한 최종 제안 수량 산출
 - 제안 결과를 발주 초안(`DRAFT`)으로 저장
-- SSE(Server-Sent Events) 방식의 에이전트 진행 상태 스트림
+- 실제 워크플로 실행과 연결된 SSE(Server-Sent Events) 진행 상태 스트림
+  - 단계별 시작·완료 상태와 결과를 실시간 표시
+  - 실패 단계와 완료 단계 정보를 전달해 화면에서 오류 위치 표시
 - 발주 제안 승인·수정·거절 이벤트 수집 API
 - Next.js 기반 발주 제안 검토 화면
 - 헬스 체크 및 기본 API/워크플로 테스트
@@ -143,10 +145,9 @@ python -m app.scripts.seed
 | `GET`   | `/api/v1/inventory/products/{product_id}`     | 상품 상세 조회                                                |
 | `POST`  | `/api/v1/inventory/products`                  | 상품 등록 (ADMIN, MANAGER)                                    |
 | `POST`  | `/api/v1/orders/run-prediction/{product_id}`  | 발주 수량 계산 및 발주 초안 저장                              |
-| `GET`   | `/api/v1/stream/agent-stream/{product_id}`    | 에이전트 진행 상태 SSE 스트림                                 |
+| `GET`   | `/api/v1/stream/agent-stream/{product_id}`    | 발주 예측 실행 과정의 단계별 상태·결과·오류 SSE 스트림         |
 | `PATCH` | `/api/v1/orders/{purchase_order_id}/decision` | 발주 승인·수정·거절 및 결정 이력 저장                         |
 | `GET`   | `/api/v1/orders/decision-metrics`             | 테넌트별 승인·수정·거절 건수 조회                             |
-| `POST`  | `/api/v1/orders/run-prediction/{product_id}`  | 발주 수량 계산, 발주 초안 저장 및 단계별 워크플로우 결과 반환 |
 
 ### 상품 등록 예시
 
@@ -200,6 +201,16 @@ curl -X POST http://localhost:8000/api/v1/orders/run-prediction/1
 프론트엔드는 구조화된 `decision_basis`를 이용해 근거를 표시하며,
 문자열 로그를 파싱해 계산값을 추출하지 않습니다.
 
+### 실시간 발주 예측 스트림
+
+`GET /api/v1/stream/agent-stream/{product_id}`는 발주 예측을 실행하면서
+SSE 이벤트를 순서대로 전송합니다. 프론트엔드 `/orders` 화면은 이 이벤트를 받아
+각 AI 단계의 상태를 갱신하고, 마지막 `result` 이벤트로 발주 제안을 표시합니다.
+
+- `step`: 각 단계의 `processing` 또는 `completed` 상태, 메시지, 표시 이름
+- `result`: 생성된 발주 초안과 `workflow_steps`, `decision_basis`를 포함한 최종 결과
+- `error`: 실패한 단계 ID, 이미 완료한 단계 ID, 오류 메시지
+
 ## 테스트
 
 백엔드 의존성을 설치한 환경에서 실행합니다.
@@ -219,8 +230,6 @@ pytest
 ## 현재 MVP의 제한 사항
 
 - 인증은 아직 구현 전이며, 개발 편의를 위해 임시 관리자 사용자를 사용합니다. 운영 환경에 사용하면 안 됩니다.
-- 프론트엔드의 발주 제안 데이터는 현재 예시 값으로 표시됩니다. 백엔드 발주 API와의 실제 조회 연동이 필요합니다.
-- SSE 엔드포인트는 현재 데모용 단계 메시지를 전송하며, 실제 워크플로와 실시간으로 연결되어 있지 않습니다.
 - 수요 예측은 고정된 판매 이력 기반의 단순 계산입니다. POS, 프로모션, 계절성, 공급사 데이터를 아직 연동하지 않았습니다.
 - 상품 모델에는 공급사 관계가 있으나, 발주 계산에서는 공급사별 리드타임/MOQ를 직접 조회하지 않고 기본값을 사용합니다.
 - 의사결정 지표는 현재 전체 누적 건수만 제공합니다. 기간별 추이와 상품별 분석이 필요합니다.
