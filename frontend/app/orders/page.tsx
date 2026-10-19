@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetcher, ApiError } from "@/lib/api";
+import { fetcher, ApiError, API_BASE_URL } from "@/lib/api";
 
 interface Product {
   id: number;
@@ -18,7 +18,7 @@ type WorkflowStepId =
   | "supervisor"
   | "operator_decision";
 
-type WorkflowStatus = "pending" | "completed" | "error";
+type WorkflowStatus = "pending" | "processing" | "completed" | "error";
 
 interface WorkflowStep {
   id: WorkflowStepId;
@@ -26,6 +26,19 @@ interface WorkflowStep {
   message: string;
   input_summary?: string;
   output_summary?: string;
+}
+
+interface WorkflowStepEvent {
+  step: WorkflowStepId;
+  status: "processing" | "completed" | "error";
+  message: string;
+  label?: string;
+}
+
+interface WorkflowStreamError {
+  failed_step_id?: WorkflowStepId;
+  completed_step_ids?: WorkflowStepId[];
+  message: string;
 }
 
 interface WorkflowFailureDetail {
@@ -107,6 +120,8 @@ function statusLabel(status: WorkflowStatus) {
   switch (status) {
     case "completed":
       return "완료";
+    case "processing":
+      return "실행 중";
     case "error":
       return "오류";
     default:
@@ -116,6 +131,8 @@ function statusLabel(status: WorkflowStatus) {
 
 function statusClass(status: WorkflowStatus) {
   switch (status) {
+    case "processing":
+      return "border-blue-300 bg-blue-50 text-blue-800";
     case "completed":
       return "border-emerald-300 bg-emerald-50 text-emerald-800";
     case "error":
@@ -140,6 +157,8 @@ export default function OrderApprovalPage() {
   const [error, setError] = useState("");
   const [decisionMessage, setDecisionMessage] = useState("");
 
+  const predictionSourceRef = useRef<EventSource | null>(null);
+
   useEffect(() => {
     fetcher<Product[]>("/inventory/products")
       .then((items) => {
@@ -148,6 +167,10 @@ export default function OrderApprovalPage() {
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
+
+    return () => {
+      predictionSourceRef.current?.close();
+    };
   }, []);
 
   const selectedProduct = products.find(
@@ -171,6 +194,9 @@ export default function OrderApprovalPage() {
   const runPrediction = async () => {
     if (!productId) return;
 
+    predictionSourceRef.current?.close();
+    predictionSourceRef.current = null;
+
     setSubmitting(true);
     setError("");
     setDecisionMessage("");
@@ -182,87 +208,155 @@ export default function OrderApprovalPage() {
         ...step,
         message:
           step.id === "demand_agent"
-            ? "발주 예측 API 응답을 기다리고 있습니다."
+            ? "SSE 연결 및 발주 예측 실행을 기다리고 있습니다."
             : step.message,
       })),
     );
 
-    try {
-      const result = await fetcher<OrderProposal>(
-        `/orders/run-prediction/${productId}`,
-        {
-          method: "POST",
-        },
-      );
-      setProposal(result);
-      setFinalQty(result.suggested_qty);
+    const source = new EventSource(
+      `${API_BASE_URL}/stream/agent-stream/${productId}`,
+    );
+    predictionSourceRef.current = source;
 
-      setWorkflowSteps([
-        ...result.workflow_steps,
-        {
-          id: "operator_decision",
-          status: "pending",
-          message:
-            "제안 수량을 검토한 후 승인, 수량 수정 또는 거절을 선택하세요.",
-          input_summary: `AI 제안 수량 ${result.suggested_qty}개`,
-          output_summary: "운영자 결정 대기",
-        },
-      ]);
-    } catch (err) {
-      const failure =
-        err instanceof ApiError &&
-        err.detail !== null &&
-        typeof err.detail === "object"
-          ? (err.detail as Partial<WorkflowFailureDetail>)
-          : null;
+    let settled = false;
 
-      const failedStepId = failure?.failed_step_id;
-      const completedStepIds = new Set(failure?.completed_step_ids ?? []);
+    const closeSource = () => {
+      source.close();
 
-      const message =
-        failure?.message ??
-        (err instanceof Error ? err.message : "발주 예측에 실패했습니다.");
-
-      setError(message);
-
-      setWorkflowSteps((steps) =>
-        steps.map((step) => {
-          if (step.id === "operator_decision") {
-            return {
-              ...step,
-              status: "pending",
-              message: "발주 예측 실패로 운영자 결정을 진행할 수 없습니다.",
-            };
-          }
-
-          if (completedStepIds.has(step.id)) {
-            return {
-              ...step,
-              status: "completed",
-            };
-          }
-
-          if (step.id === failedStepId) {
-            return {
-              ...step,
-              status: "error",
-              message,
-            };
-          }
-
-          return {
-            ...step,
-            status: "pending",
-          };
-        }),
-      );
-
-      if (failedStepId) {
-        setSelectedStepId(failedStepId);
+      if (predictionSourceRef.current === source) {
+        predictionSourceRef.current = null;
       }
-    } finally {
+    };
+
+    const finish = () => {
+      if (settled) return false;
+
+      settled = true;
+      closeSource();
       setSubmitting(false);
-    }
+      return true;
+    };
+
+    source.addEventListener("step", (event) => {
+      if (settled) return;
+
+      try {
+        const payload = JSON.parse(
+          (event as MessageEvent<string>).data,
+        ) as WorkflowStepEvent;
+
+        if (!AI_STEP_IDS.includes(payload.step)) return;
+
+        setWorkflowSteps((steps) =>
+          steps.map((step) =>
+            step.id === payload.step
+              ? {
+                  ...step,
+                  status: payload.status,
+                  message: payload.message,
+                }
+              : step,
+          ),
+        );
+
+        if (payload.status === "processing") {
+          setSelectedStepId(payload.step);
+        }
+      } catch {
+        // WIP
+      }
+    });
+
+    source.addEventListener("result", (event) => {
+      if (settled) return;
+
+      try {
+        const result = JSON.parse(
+          (event as MessageEvent<string>).data,
+        ) as OrderProposal;
+
+        if (!finish()) return;
+
+        setProposal(result);
+        setFinalQty(result.suggested_qty);
+
+        setWorkflowSteps([
+          ...result.workflow_steps,
+          {
+            id: "operator_decision",
+            status: "pending",
+            message:
+              "제안 수량을 검토한 후 승인, 수량 수정 또는 거절을 선택하세요.",
+            input_summary: `AI 제안 수량 ${result.suggested_qty}개`,
+            output_summary: "운영자 결정 대기",
+          },
+        ]);
+
+        setSelectedStepId("operator_decision");
+      } catch {
+        if (!finish()) return;
+        setError("발주 예측 결과를 해석하지 못했습니다.");
+      }
+    });
+
+    source.addEventListener("error", (event) => {
+      if (settled) return;
+
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      try {
+        const failure = JSON.parse(event.data) as WorkflowStreamError;
+
+        if (!finish()) return;
+
+        const completedIds = new Set(failure.completed_step_ids ?? []);
+
+        setError(failure.message);
+
+        setWorkflowSteps((steps) =>
+          steps.map((step) => {
+            if (step.id === "operator_decision") {
+              return {
+                ...step,
+                status: "pending",
+                message: "발주 예측 실패로 운영자 결정을 진행할 수 없습니다.",
+              };
+            }
+
+            if (completedIds.has(step.id)) {
+              return { ...step, status: "completed" };
+            }
+
+            if (step.id === failure.failed_step_id) {
+              return {
+                ...step,
+                status: "error",
+                message: failure.message,
+              };
+            }
+
+            return step;
+          }),
+        );
+
+        if (failure.failed_step_id) {
+          setSelectedStepId(failure.failed_step_id);
+        }
+      } catch {
+        if (!finish()) return;
+        setError("발주 예측 처리 중 오류가 발생했습니다.");
+      }
+    });
+
+    source.onerror = () => {
+      if (settled) return;
+      finish();
+      setError(
+        "SSE 연결이 끊어졌습니다. 발주 초안이 생성되었는지 확인한 후 다시 시도하세요.",
+      );
+    };
   };
 
   const handleDecision = async (
