@@ -8,6 +8,7 @@ from app.services.agent_workflow import(
 )
 
 from app.services.inventory_service import InventoryService
+from app.services.sales_record_service import SalesRecordService
 
 StepCallback = Callable[[str, str, str], Awaitable[None]]
 
@@ -101,11 +102,27 @@ async def execute_inventory_prediction(
         tenant_id=tenant_id,
     )
 
+    daily_sales_history = (
+        await SalesRecordService.get_daily_sales_history(
+            db=db,
+            product_id=product_id,
+            tenant_id=tenant_id,
+            days=30,
+        )
+    )
+
+    if not any(daily_sales_history):
+        raise ValueError(
+            "최근 30일간 판매 기록이 없어 수요를 예측할 수 없습니다."
+        )
+
+    sales_history = [sum(daily_sales_history)]
+
     initial_state = {
         "product_id": product.id,
         "current_stock": product.current_stock,
         "safety_stock": product.safety_stock,
-        "sales_history": [12, 18, 22, 30],
+        "sales_history": sales_history,
         "lead_time_days": getattr(product, "lead_time_days", 7),
         "moq": getattr(product, "moq", 1),
         "predicted_demand": 0,
