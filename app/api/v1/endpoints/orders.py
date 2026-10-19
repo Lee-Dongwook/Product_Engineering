@@ -126,7 +126,30 @@ async def run_inventory_prediction(
         "messages": []
     }
 
-    workflow_result = await scm_workflow.ainvoke(initial_state)
+    completed_step_ids: set[str] = set()
+    workflow_result = dict(initial_state)
+
+    async for update in scm_workflow.astream(
+        initial_state,
+        stream_mode="updates",
+    ):
+        for node_id, node_output in update.items():
+            if node_id in {
+                "demand_agent",
+                "supplier_agent",
+                "supervisor",
+            }:
+                completed_step_ids.add(node_id)
+            
+            for key, value in node_output.items():
+                if key == "messages":
+                    workflow_result[key] = [
+                        *workflow_result.get(key, []),
+                        *value,
+                    ]
+                else:
+                    workflow_result[key] = value
+    
     suggested_qty = workflow_result.get("suggested_qty", 0)
     reasoning_summary = workflow_result.get("reasoning_summary", "")
     predicted_demand = workflow_result.get("predicted_demand", 0)
@@ -149,6 +172,7 @@ async def run_inventory_prediction(
         "workflow_steps": build_workflow_steps(
             workflow_result,
             initial_state,
+            completed_step_ids=completed_step_ids,
         ),
         "decision_basis": {
             "inputs": {
