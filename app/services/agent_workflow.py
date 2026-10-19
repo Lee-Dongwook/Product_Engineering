@@ -28,7 +28,12 @@ StepCallback = Callable[
     Awaitable[None],
 ]
 
-def track_node(node_id: str, node_func,  on_step: StepCallback | None = None,):
+StepResultCallback = Callable[
+    [str, Dict[str, Any]],
+    Awaitable[None],
+]
+
+def track_node(node_id: str, node_func, on_step: StepCallback | None = None, on_step_result: StepResultCallback | None = None,):
     async def wrapped(state: SCMState) -> Dict[str, Any]:
         if on_step:
             await on_step(
@@ -44,6 +49,8 @@ def track_node(node_id: str, node_func,  on_step: StepCallback | None = None,):
                     result.get("messages", ["단계 실행을 완료했습니다."])[-1]
                 )
                 await on_step(node_id, "completed", message)
+            if on_step_result:
+                await on_step_result(node_id, result)
 
             return result
         except Exception as exc:
@@ -104,12 +111,13 @@ async def supervisor_node(state: SCMState) -> Dict[str, Any]:
 
 def create_scm_agent_workflow(
     on_step: StepCallback | None = None,
+    on_step_result: StepResultCallback | None = None,
 ):
     workflow = StateGraph(SCMState)
 
-    workflow.add_node("demand_agent", track_node("demand_agent", demand_prediction_node, on_step),)
-    workflow.add_node("supplier_agent", track_node("supplier_agent", supplier_analysis_node, on_step),)
-    workflow.add_node("supervisor", track_node("supervisor", supervisor_node, on_step),)
+    workflow.add_node("demand_agent", track_node("demand_agent", demand_prediction_node, on_step, on_step_result),)
+    workflow.add_node("supplier_agent", track_node("supplier_agent", supplier_analysis_node, on_step, on_step_result),)
+    workflow.add_node("supervisor", track_node("supervisor", supervisor_node, on_step, on_step_result),)
 
     workflow.set_entry_point("demand_agent")
     workflow.add_edge("demand_agent", "supplier_agent")
